@@ -490,7 +490,9 @@ class SoundEventHandler:
         Controller lookup is case-insensitive and tolerates partial/prefix
         matches so we can target common FMX names like "A Attack" without
         needing to know the exact spelling across SunVox versions.
-        Unknown names are silently ignored (returned in 'skipped').
+        Unknown names are silently ignored (returned in 'skipped'). If
+        multiple preset keys resolve to the same real controller, only the
+        first one wins (so you can supply a list of fallback spellings).
         """
         n = self.player.sv_get_number_of_module_ctls(mod_id)
         names = []
@@ -501,6 +503,7 @@ class SoundEventHandler:
             names.append((i, (raw_name or '').strip().lower()))
 
         applied, skipped = [], []
+        used_indices = set()   # controllers already set — earlier key wins
         for pname, pval in preset.items():
             key = pname.strip().lower()
             # Prefer exact match, then startswith, then substring
@@ -524,9 +527,15 @@ class SoundEventHandler:
                 skipped.append(pname)
                 continue
 
+            if match in used_indices:
+                # An earlier synonym already set this controller
+                continue
+
             # set_module_ctl uses 1-based index
             self.player.set_module_ctl(mod_id, match + 1, int(pval))
-            applied.append((pname, match + 1))
+            applied.append({'key': pname, 'index': match + 1,
+                            'name': names[match][1], 'value': int(pval)})
+            used_indices.add(match)
 
         return {'applied': applied, 'skipped': skipped}
 
@@ -667,55 +676,114 @@ class SoundEventHandler:
 
         # Apply piano-ish FMX preset (name-based — robust across versions).
         #
-        # Real pianos have: fast attack, moderate decay, no sustain pedal-free
-        # tail (amplitude falls naturally), mild inharmonic brightness from
-        # hammer strike, slight detune per voice. In FMX terms:
-        #   - Operator C (carrier) envelope: instant attack, fast decay,
-        #     low sustain, medium release → percussive shape
-        #   - Operator B (modulator) → small amount for "bite" at onset,
-        #     decays quickly so the tone settles into a pure-ish sine
-        #   - A touch of feedback on a sine for metallic overtones
-        #   - Slightly detuned op for chorusy warmth
+        # FMX controller names vary slightly across SunVox versions. We try
+        # many candidate names for each "concept" (attack/decay/etc) using
+        # substring matching; unmatched names are simply skipped.
+        #
+        # Piano character: instant attack, medium decay, zero sustain, mild
+        # feedback for metallic bite, a modulator with high freq ratio for
+        # inharmonic "hammer" spectrum. Similar to a DX7 E.PIANO-1 patch.
+        piano_preset = {
+            # Master
+            'volume':       28000,
+            'polyphony':    16,
+
+            # Operator / carrier envelopes — try common variants
+            'c attack':     0,
+            'carrier attack': 0,
+            'op1 attack':   0,
+            'attack a':     0,
+
+            'c decay':      14000,
+            'carrier decay': 14000,
+            'op1 decay':    14000,
+            'decay a':      14000,
+
+            'c sustain':    0,
+            'carrier sustain': 0,
+            'op1 sustain':  0,
+            'sustain a':    0,
+
+            'c release':    10000,
+            'carrier release': 10000,
+            'op1 release':  10000,
+            'release a':    10000,
+
+            # Modulator envelopes — fast attack+decay for bell-like bite
+            'b attack':     0,
+            'modulator attack': 0,
+            'op2 attack':   0,
+            'attack b':     0,
+
+            'b decay':      5000,
+            'modulator decay': 5000,
+            'op2 decay':    5000,
+            'decay b':      5000,
+
+            'b sustain':    0,
+            'modulator sustain': 0,
+            'op2 sustain':  0,
+            'sustain b':    0,
+
+            'b release':    4000,
+            'modulator release': 4000,
+            'op2 release':  4000,
+            'release b':    4000,
+
+            # Frequency ratios — modulator high → hammer overtones
+            'c freq ratio': 256,     # 1:1 in FMX fixed-point form if present
+            'c ratio':      1,
+            'carrier ratio': 1,
+            'op1 ratio':    1,
+
+            'b freq ratio': 1024,    # ~4:1 ratio
+            'b ratio':      4,
+            'modulator ratio': 4,
+            'op2 ratio':    4,
+
+            # Levels
+            'volume a':     28000,
+            'c volume':     28000,
+            'carrier volume': 28000,
+            'volume b':     14000,
+            'b volume':     14000,
+            'modulator volume': 14000,
+
+            # Feedback for metallic sheen
+            'feedback':     3000,
+            'a feedback':   3000,
+            'op1 feedback': 3000,
+        }
         try:
-            self._apply_preset_by_name(piano, {
-                # Amplitude envelopes — short, percussive
-                'a attack':  0,
-                'a decay':   14000,
-                'a sustain': 0,
-                'a release': 9000,
-
-                'b attack':  0,
-                'b decay':   6000,     # modulator sparkle fades fast
-                'b sustain': 0,
-                'b release': 4000,
-
-                'c attack':  0,
-                'c decay':   18000,    # carrier body
-                'c sustain': 0,        # piano has no real sustain
-                'c release': 12000,
-
-                # Routing + levels (FMX defaults to a→b→c, often works well)
-                'a volume':  24000,
-                'b volume':  18000,
-                'c volume':  30000,
-
-                # Pitch — op C is the audible carrier; op B adds overtones
-                'a freq ratio': 1,
-                'b freq ratio': 3,     # hammer-like odd-harmonic bite
-                'c freq ratio': 1,
-
-                # Gentle feedback for metallic sheen
-                'a feedback':   2000,
-                'b feedback':   0,
-                'c feedback':   0,
-
-                # Misc
-                'volume':    28000,
-                'polyphony': 16,
-                'mode':      0,        # (if present) polyphonic
-            })
+            preset_result = self._apply_preset_by_name(piano, piano_preset)
         except Exception as e:
-            print(f'[build_piano] preset tuning skipped: {e}')
+            preset_result = {'applied': [], 'skipped': list(piano_preset.keys()),
+                             'error': str(e)}
+
+        # Collect the current full controller list on the piano module so we
+        # can return it (and print it) for debugging: otherwise the user has
+        # no way to tell which FMX ctl names actually exist.
+        piano_ctls = []
+        try:
+            n = self.player.sv_get_number_of_module_ctls(piano)
+            for i in range(n):
+                nm = self.player.sv_get_module_ctl_name(piano, i)
+                if isinstance(nm, bytes):
+                    nm = nm.decode('utf-8', errors='replace')
+                val_raw = self.player.sv_get_module_ctl_value(piano, i, 0)
+                val_scaled = self.player.sv_get_module_ctl_value(piano, i, 1)
+                piano_ctls.append({'index': i + 1, 'name': (nm or '').strip(),
+                                   'raw': val_raw, 'scaled': val_scaled})
+        except Exception:
+            pass
+
+        # Server-side visibility: this is invaluable when tuning presets.
+        print(f'[build_piano] {piano_type} controllers on "{name}":')
+        for c in piano_ctls:
+            print(f'   {c["index"]:>2}. {c["name"]:<24} raw={c["raw"]:>6} '
+                  f'scaled={c["scaled"]}')
+        print(f'[build_piano] preset applied: {len(preset_result.get("applied", []))}, '
+              f'skipped: {len(preset_result.get("skipped", []))}')
 
         # Clear cached lookups so the new "Piano" is findable by name.
         self._module_cache = {}
@@ -729,6 +797,8 @@ class SoundEventHandler:
                 'echo': {'id': echo, 'name': f'{name} Echo', 'type': echo_type},
                 'reverb': {'id': rev, 'name': f'{name} Reverb', 'type': rev_type},
             },
+            'piano_ctls': piano_ctls,
+            'preset_result': preset_result,
             'hint': f'Use play_module_note with "module": "{name}" to play notes through it.',
         }
 

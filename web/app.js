@@ -807,6 +807,25 @@ function handleIncoming(data) {
         populateModuleTypes(data.types);
     }
 
+    // build_piano returns rich diagnostics — surface them in the log so
+    // the user can see exactly which controllers were tuned and which
+    // preset keys didn't match any FMX control (no guesswork required).
+    if (data.action === 'build_piano' && data.status === 'ok') {
+        const applied = (data.preset_result && data.preset_result.applied) || [];
+        const skipped = (data.preset_result && data.preset_result.skipped) || [];
+        log('info', `piano built — ${applied.length} ctls tuned, ${skipped.length} preset keys unmatched`);
+        if (applied.length) {
+            log('info', 'applied: ' + applied.map(a => `${a.name}=${a.value}`).join(', '));
+        }
+        if (data.piano_ctls && data.piano_ctls.length) {
+            log('info', `Piano has ${data.piano_ctls.length} controllers: ` +
+                data.piano_ctls.map(c => c.name).filter(Boolean).join(', '));
+        }
+        // Auto-open the Piano inspector so user can see/tweak it.
+        lab.selectedModule = 'Piano';
+        setTimeout(() => send({ action: 'get_module_ctls', module: 'Piano' }), 120);
+    }
+
     // Anything that mutates the module graph → re-list modules so the UI reflects it.
     if (data.status === 'ok' && [
         'build_piano', 'create_module', 'remove_module',
