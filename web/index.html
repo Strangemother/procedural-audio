@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Procedural Audio — WS Controller</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<header class="topbar">
+    <h1>Procedural Audio</h1>
+    <div class="connection">
+        <input id="wsUrl" type="text" value="ws://localhost:8765" spellcheck="false" />
+        <button id="connectBtn" class="primary">Connect</button>
+        <span id="status" class="status disconnected">disconnected</span>
+    </div>
+</header>
+
+<main>
+    <section class="panel">
+        <h2>Quick Notes</h2>
+        <div class="row">
+            <label>Octave
+                <input id="octave" type="number" min="0" max="9" value="4" />
+            </label>
+            <label>Velocity
+                <input id="velocity" type="range" min="1" max="129" value="129" />
+                <span id="velocityValue">129</span>
+            </label>
+            <label>Duration (s)
+                <input id="duration" type="number" step="0.05" min="0" value="0.3" />
+            </label>
+        </div>
+        <div id="keyboard" class="keyboard"></div>
+        <p class="hint">Tip: use your computer keyboard — <kbd>A S D F G H J K</kbd> for white keys, <kbd>W E T Y U</kbd> for black keys. <kbd>Z</kbd>/<kbd>X</kbd> shift octaves.</p>
+    </section>
+
+    <section class="panel">
+        <h2>Transport &amp; Volume</h2>
+        <div class="row">
+            <button data-action="stop">Stop</button>
+            <button data-action="note_off">Note Off</button>
+            <button data-action="ping">Ping</button>
+            <label>Volume
+                <input id="volume" type="range" min="0" max="1" step="0.01" value="1" />
+                <span id="volumeValue">1.00</span>
+            </label>
+        </div>
+    </section>
+
+    <section class="panel">
+        <h2>SunVox Files</h2>
+        <div class="row">
+            <input id="fileInput" type="text" value="assets/test.sunvox" spellcheck="false" />
+            <button id="playFileBtn">Play File</button>
+            <button id="loadFileBtn">Load File</button>
+            <button id="listModulesBtn">List Modules</button>
+        </div>
+        <div id="modules" class="modules"></div>
+    </section>
+
+    <section class="panel">
+        <h2>Module Note</h2>
+        <div class="row">
+            <label>Module
+                <input id="moduleName" type="text" value="Alpha" spellcheck="false" />
+            </label>
+            <label>Note
+                <input id="moduleNote" type="text" value="C4" spellcheck="false" />
+            </label>
+            <label>Duration
+                <input id="moduleDuration" type="number" step="0.05" min="0" value="0.3" />
+            </label>
+            <button id="moduleNoteBtn">Play Module Note</button>
+        </div>
+    </section>
+
+    <section class="panel wide">
+        <h2>Procedural Flight
+            <span class="subtitle">a gentle piano companion</span>
+        </h2>
+        <div class="row">
+            <button id="flightStartBtn" class="primary">▶ Start</button>
+            <button id="flightStopBtn">■ Stop</button>
+            <label>Key
+                <select id="flightKey">
+                    <option value="F">F major (warm)</option>
+                    <option value="C">C major (bright)</option>
+                    <option value="D">D major (soaring)</option>
+                    <option value="Am">A minor (pensive)</option>
+                    <option value="Dm">D minor (wistful)</option>
+                </select>
+            </label>
+            <label>Mood
+                <select id="flightMood">
+                    <option value="drift">Drift</option>
+                    <option value="soar">Soar</option>
+                    <option value="flutter">Flutter</option>
+                    <option value="dream">Dream</option>
+                </select>
+            </label>
+            <label>Tempo
+                <input id="flightTempo" type="range" min="48" max="96" value="68" />
+                <span id="flightTempoValue">68</span> bpm
+            </label>
+            <label>Velocity
+                <input id="flightVelocity" type="range" min="30" max="110" value="75" />
+                <span id="flightVelocityValue">75</span>
+            </label>
+        </div>
+        <div class="row">
+            <label>Instrument
+                <input id="flightModule" type="text" placeholder="(default synth)" value="Piano" style="width:140px" />
+            </label>
+            <label><input type="checkbox" id="flightBassEnabled" checked /> Bass</label>
+            <label><input type="checkbox" id="flightArpEnabled" checked /> Arpeggio</label>
+            <label><input type="checkbox" id="flightMelodyEnabled" checked /> Melody</label>
+            <label><input type="checkbox" id="flightFlutterEnabled" checked /> Flutters</label>
+            <span id="flightStatus" class="subtitle">idle</span>
+        </div>
+    </section>
+
+    <section class="panel wide">
+        <h2>Instrument Lab
+            <span class="subtitle">build & tweak sunvox modules live</span>
+        </h2>
+        <div class="row">
+            <button id="buildPianoBtn" class="primary">🎹 Build Piano</button>
+            <button id="refreshModulesBtn">Refresh Modules</button>
+            <input id="loadInstrumentPath" type="text" placeholder="path/to/instrument.sunsynth"
+                value="sunvox_lib-2.0e/sunvox_lib/resources/organ.sunsynth" />
+            <button id="loadInstrumentBtn">Load Instrument File</button>
+        </div>
+        <div class="row">
+            <label>New module
+                <select id="newModuleType"></select>
+            </label>
+            <input id="newModuleName" type="text" placeholder="name" />
+            <button id="createModuleBtn">Create</button>
+            <label>Connect
+                <input id="connectSrc" type="text" placeholder="source" style="width:100px" />
+                →
+                <input id="connectDst" type="text" placeholder="dest or OUT" style="width:100px" />
+            </label>
+            <button id="connectBtn2">Wire</button>
+        </div>
+        <div id="moduleList" class="modules"></div>
+        <div id="ctlInspector" class="ctl-inspector"></div>
+        <p class="hint">Tip: click a module to inspect its controllers. Drag sliders to hear changes in real time. Play notes through any module with <kbd>play_module_note</kbd> by setting its name in the <em>Module Note</em> panel above.</p>
+    </section>
+
+    <section class="panel">
+        <h2>Device Events</h2>
+        <div class="row" id="deviceButtons">
+            <!-- populated after list_mappings -->
+        </div>
+        <div class="row">
+            <button id="listMappingsBtn">Refresh Mappings</button>
+            <input id="deviceEvent" type="text" placeholder="event name (e.g. door_open)" />
+            <button id="sendDeviceBtn">Send Device Event</button>
+        </div>
+    </section>
+
+    <section class="panel">
+        <h2>Raw JSON</h2>
+        <textarea id="rawJson" rows="4" spellcheck="false">{"action": "beep", "note": "C4", "duration": 0.3}</textarea>
+        <div class="row">
+            <button id="sendRawBtn">Send JSON</button>
+        </div>
+    </section>
+
+    <section class="panel">
+        <h2>Log
+            <button id="clearLogBtn" class="tiny">clear</button>
+        </h2>
+        <div id="log" class="log"></div>
+    </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

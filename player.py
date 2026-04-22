@@ -121,6 +121,7 @@ class CoreLib(object):
         self.lock(slotnr)
         _name = c_str(name)
         _type = c_str(type)
+        self.svlib.sv_new_module.restype = ctypes.c_int32
         v = self.svlib.sv_new_module(slotnr, _type, _name, x,y,z)
 
         print(f'svlib.sv_new_module {slotnr=}, {type=}, {_name=}', f"xyz={x,y,z} == {v}")
@@ -207,6 +208,55 @@ class CoreLib(object):
         slot = slotnr or self.slotnr
         return self.svlib.sv_send_event(slot, track_num, note, vel, module+1, ctl, ctl_val)
                                 # track 0; note n; velocity 129 (max); module m;
+
+    # ---------------------------------------------------------------
+    # Module / controller helpers (low-level bindings).
+    # These are used by the instrument-building WebSocket actions.
+    # ---------------------------------------------------------------
+
+    def sv_remove_module(self, mod_num, slotnr=None):
+        slot = slotnr or self.slotnr
+        self.lock(slot)
+        try:
+            return self.svlib.sv_remove_module(slot, mod_num)
+        finally:
+            self.unlock(slot)
+
+    def sv_load_module_file(self, filename, x=512, y=512, z=0, slotnr=None):
+        """Load a .sunsynth / .xi / .wav / .aiff as a new module in the project.
+
+        Returns the new module number, or a negative error code.
+        """
+        slot = slotnr or self.slotnr
+        self.svlib.sv_load_module.restype = ctypes.c_int32
+        return self.svlib.sv_load_module(slot, c_str(filename), x, y, z)
+
+    def sv_get_number_of_module_ctls(self, mod_num, slotnr=None):
+        slot = slotnr or self.slotnr
+        return self.svlib.sv_get_number_of_module_ctls(slot, mod_num)
+
+    def sv_get_module_ctl_name(self, mod_num, ctl_num, slotnr=None):
+        slot = slotnr or self.slotnr
+        self.svlib.sv_get_module_ctl_name.restype = ctypes.c_char_p
+        name = self.svlib.sv_get_module_ctl_name(slot, mod_num, ctl_num)
+        if name is None:
+            return None
+        return name.decode('utf-8', errors='replace')
+
+    def sv_get_module_ctl_value(self, mod_num, ctl_num, scaled=0, slotnr=None):
+        slot = slotnr or self.slotnr
+        self.svlib.sv_get_module_ctl_value.restype = ctypes.c_int32
+        return self.svlib.sv_get_module_ctl_value(slot, mod_num, ctl_num, scaled)
+
+    def set_module_ctl(self, mod_num, ctl_num, value, track=0, slotnr=None):
+        """Change a controller's value by sending a zero-note event with ctl/ctl_val.
+
+        ctl_num is 1-based (first controller is 1).
+        value is the raw (unscaled) integer controller value (typically 0..32768).
+        """
+        ctl_field = (ctl_num & 0xFF) << 8
+        return self.sv_send_event(track, 0, 0, mod_num, ctl_field, int(value),
+                                  slotnr=slotnr)
 
 
 class SoundBoard(CoreLib):

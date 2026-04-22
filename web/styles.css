@@ -1,0 +1,294 @@
+:root {
+    --bg: #121417;
+    --panel: #1b1f24;
+    --panel-2: #242a31;
+    --text: #e6e8eb;
+    --muted: #8a93a0;
+    --accent: #4fc3f7;
+    --accent-2: #7c4dff;
+    --ok: #66bb6a;
+    --err: #ef5350;
+    --border: #2d333b;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+}
+
+.topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 20px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.topbar h1 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 500;
+}
+
+.connection {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.connection input {
+    width: 260px;
+}
+
+.status {
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 500;
+}
+.status.connected { background: rgba(102, 187, 106, 0.2); color: var(--ok); }
+.status.disconnected { background: rgba(239, 83, 80, 0.2); color: var(--err); }
+.status.connecting { background: rgba(79, 195, 247, 0.2); color: var(--accent); }
+
+main {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    gap: 16px;
+    padding: 16px;
+}
+
+.panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+}
+
+.panel h2 {
+    margin: 0 0 12px;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+input[type="text"], input[type="number"], textarea {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-family: inherit;
+    font-size: 13px;
+    outline: none;
+}
+input[type="text"]:focus, input[type="number"]:focus, textarea:focus {
+    border-color: var(--accent);
+}
+
+textarea {
+    width: 100%;
+    font-family: "SF Mono", Consolas, monospace;
+    resize: vertical;
+}
+
+input[type="range"] {
+    width: 120px;
+}
+
+button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    transition: all 0.1s;
+}
+button:hover { background: #2f363e; border-color: var(--accent); }
+button:active { transform: translateY(1px); }
+button.primary { background: var(--accent); color: #000; border-color: var(--accent); }
+button.primary:hover { background: #29b6f6; }
+button.tiny { padding: 2px 8px; font-size: 11px; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.keyboard {
+    display: flex;
+    position: relative;
+    user-select: none;
+    height: 120px;
+    padding: 0 2px;
+}
+
+.key {
+    flex: 1;
+    border: 1px solid var(--border);
+    border-radius: 0 0 4px 4px;
+    margin: 0 1px;
+    cursor: pointer;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 6px;
+    font-size: 10px;
+    transition: background 0.05s;
+}
+.key.white { background: #ecf0f1; color: #222; }
+.key.black {
+    background: #222;
+    color: #ccc;
+    position: absolute;
+    height: 65%;
+    width: 5%;
+    z-index: 2;
+}
+.key.white:hover { background: #d7dde0; }
+.key.black:hover { background: #444; }
+.key.active.white { background: var(--accent); color: #000; }
+.key.active.black { background: var(--accent-2); color: #fff; }
+
+.modules {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+}
+.modules button {
+    font-size: 11px;
+    padding: 4px 10px;
+    background: var(--panel-2);
+}
+
+.log {
+    background: #0c0e11;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-family: "SF Mono", Consolas, monospace;
+    font-size: 12px;
+    max-height: 240px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+.log .entry { margin-bottom: 2px; }
+.log .sent { color: var(--accent); }
+.log .recv { color: var(--ok); }
+.log .err { color: var(--err); }
+.log .info { color: var(--muted); }
+.log .time { color: #555; margin-right: 6px; }
+
+.hint {
+    font-size: 11px;
+    color: var(--muted);
+    margin: 6px 0 0;
+}
+
+.panel.wide { grid-column: 1 / -1; }
+
+.subtitle {
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    margin-left: 6px;
+}
+
+select {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 5px 8px;
+    font-family: inherit;
+    font-size: 13px;
+}
+select:focus { outline: none; border-color: var(--accent); }
+
+input[type="checkbox"] { accent-color: var(--accent); }
+
+.ctl-inspector {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 8px 16px;
+}
+.ctl-inspector .ctl {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--panel-2);
+    padding: 6px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+}
+.ctl-inspector .ctl-name {
+    flex: 0 0 100px;
+    font-size: 11px;
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ctl-inspector .ctl-slider { flex: 1; }
+.ctl-inspector .ctl-value {
+    flex: 0 0 50px;
+    font-family: "SF Mono", Consolas, monospace;
+    font-size: 11px;
+    text-align: right;
+    color: var(--text);
+}
+.ctl-inspector .inspector-title {
+    grid-column: 1 / -1;
+    font-size: 12px;
+    color: var(--accent);
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.modules button.selected {
+    background: var(--accent);
+    color: #000;
+    border-color: var(--accent);
+}
+kbd {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-family: inherit;
+    font-size: 11px;
+}

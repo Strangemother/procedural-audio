@@ -122,6 +122,15 @@ class SoundEventHandler:
             'map_event': self._handle_map_event,
             'list_mappings': lambda data: {'status': 'ok', 'mappings': self.event_sound_map},
             'ping': lambda data: {'status': 'ok', 'message': 'pong'},
+            # Instrument building
+            'create_module': self._handle_create_module,
+            'remove_module': self._handle_remove_module,
+            'connect_modules': self._handle_connect_modules,
+            'load_module_file': self._handle_load_module_file,
+            'get_module_ctls': self._handle_get_module_ctls,
+            'set_module_ctl': self._handle_set_module_ctl,
+            'list_module_types': self._handle_list_module_types,
+            'build_piano': self._handle_build_piano,
         }
 
     async def handle_event(self, event_data: dict) -> dict:
@@ -210,10 +219,7 @@ class SoundEventHandler:
         return {'status': 'ok', 'action': 'load_file', 'file': filename}
 
     async def _handle_list_modules(self, data: dict) -> dict:
-        """List all modules in the currently loaded file."""
-        if not self._loaded_file:
-            return {'status': 'error', 'message': 'No file loaded. Use load_file first.'}
-
+        """List all modules currently in the slot (loaded or built at runtime)."""
         modules = []
         num_modules = self.player.sv_get_number_of_modules()
 
@@ -266,10 +272,7 @@ class SoundEventHandler:
             self._loaded_file = filename
             self._module_cache = {}
 
-        if not self._loaded_file:
-            return {'status': 'error', 'message': 'No file loaded. Specify "file" or use load_file first.'}
-
-        # Find module by name
+        # Find module by name (works for both loaded files and runtime-built modules)
         module_id = self._find_module_by_name(module_name)
 
         if module_id < 0:
@@ -298,6 +301,231 @@ class SoundEventHandler:
         value = max(0.0, min(1.0, value))
         self.player.volume(value)
         return {'status': 'ok', 'action': 'volume', 'value': value}
+
+    # ------------------------------------------------------------
+    # Instrument-building actions
+    # ------------------------------------------------------------
+
+    # Friendly aliases for the main built-in module types.
+    MODULE_TYPES = [
+        'Analog Generator', 'DrumSynth', 'FM', 'FMX', 'Generator', 'Input',
+        'Kicker', 'Vorbis player', 'Sampler', 'SpectraVoice',
+        'Amplifier', 'Compressor', 'DC Blocker', 'Delay', 'Distortion',
+        'Echo', 'EQ', 'Filter', 'Filter Pro', 'Flanger', 'LFO', 'Loop',
+        'Modulator', 'Pitch shifter', 'Reverb', 'Vocal filter', 'WaveShaper',
+        'MultiCtl', 'MultiSynth', 'Pitch Detector', 'Sound2Ctl', 'Velocity2Ctl',
+        'Glide',
+    ]
+
+    async def _handle_create_module(self, data: dict) -> dict:
+        """Create a new module in the current project.
+
+        Example:
+            {"action": "create_module", "type": "FMX", "name": "Piano",
+             "x": 512, "y": 512, "connect_to_output": true}
+        """
+        mtype = data.get('type', 'Generator')
+        name = data.get('name', mtype)
+        x = int(data.get('x', 512))
+        y = int(data.get('y', 512))
+        z = int(data.get('z', 0))
+        connect_to_output = bool(data.get('connect_to_output', False))
+
+        mod_id = self.player.sv_new_module(self.player.slotnr, mtype, name, x, y, z)
+        if mod_id < 0:
+            return {'status': 'error', 'message': f'sv_new_module failed: {mod_id}'}
+
+        if connect_to_output:
+            self.player.sv_connect_module(mod_id, self.player.OUTPUT)
+
+        return {'status': 'ok', 'action': 'create_module',
+                'id': mod_id, 'name': name, 'type': mtype}
+
+    async def _handle_remove_module(self, data: dict) -> dict:
+        target = data.get('module')
+        mod_id = self._resolve_module(target)
+        if mod_id is None:
+            return {'status': 'error', 'message': f'module not found: {target}'}
+        rc = self.player.sv_remove_module(mod_id)
+        return {'status': 'ok' if rc == 0 else 'error',
+                'action': 'remove_module', 'id': mod_id, 'code': rc}
+
+    async def _handle_connect_modules(self, data: dict) -> dict:
+        """Connect source -> destination.
+
+        {"action": "connect_modules", "source": "Piano", "destination": "Reverb"}
+        destination=0 or "OUT" to connect to output.
+        """
+        src = self._resolve_module(data.get('source'))
+        dst_raw = data.get('destination', 0)
+        if isinstance(dst_raw, str) and dst_raw.upper() == 'OUT':
+            dst = 0
+        else:
+            dst = self._resolve_module(dst_raw)
+            if dst is None:
+                dst = int(dst_raw) if isinstance(dst_raw, int) else None
+
+        if src is None or dst is None:
+            return {'status': 'error', 'message': 'source/destination not found'}
+        rc = self.player.sv_connect_module(src, dst)
+        return {'status': 'ok' if rc == 0 else 'error',
+                'action': 'connect_modules', 'source': src, 'destination': dst, 'code': rc}
+
+    async def _handle_load_module_file(self, data: dict) -> dict:
+        """Load a .sunsynth / .xi / .wav file as a new module.
+
+        {"action": "load_module_file", "file": "path/to/piano.sunsynth",
+         "connect_to_output": true}
+        """
+        filename = data.get('file')
+        if not filename or not Path(filename).exists():
+            return {'status': 'error', 'message': f'file not found: {filename}'}
+        x = int(data.get('x', 512))
+        y = int(data.get('y', 512))
+        mod_id = self.player.sv_load_module_file(filename, x, y, 0)
+        if mod_id < 0:
+            return {'status': 'error', 'message': f'sv_load_module failed: {mod_id}'}
+        if data.get('connect_to_output', True):
+            self.player.sv_connect_module(mod_id, self.player.OUTPUT)
+        # Refresh module cache
+        self._module_cache = {}
+        return {'status': 'ok', 'action': 'load_module_file',
+                'id': mod_id, 'file': filename}
+
+    def _resolve_module(self, ref) -> int:
+        """Resolve a module reference (int id, str name, or dict) to an id."""
+        if ref is None:
+            return None
+        if isinstance(ref, int):
+            return ref
+        if isinstance(ref, str):
+            mid = self._find_module_by_name(ref)
+            return mid if mid >= 0 else None
+        return None
+
+    async def _handle_get_module_ctls(self, data: dict) -> dict:
+        """Return the list of controllers for a module with current values."""
+        target = data.get('module')
+        mod_id = self._resolve_module(target)
+        if mod_id is None:
+            return {'status': 'error', 'message': f'module not found: {target}'}
+
+        n = self.player.sv_get_number_of_module_ctls(mod_id)
+        ctls = []
+        for i in range(1, n + 1):
+            name = self.player.sv_get_module_ctl_name(mod_id, i - 1)
+            raw = self.player.sv_get_module_ctl_value(mod_id, i - 1, 0)
+            scaled = self.player.sv_get_module_ctl_value(mod_id, i - 1, 1)
+            ctls.append({'index': i, 'name': name, 'raw': raw, 'scaled': scaled})
+        return {'status': 'ok', 'action': 'get_module_ctls',
+                'module': target, 'id': mod_id, 'ctls': ctls}
+
+    async def _handle_set_module_ctl(self, data: dict) -> dict:
+        """Set a controller on a module.
+
+        {"action": "set_module_ctl", "module": "Piano", "ctl": 3, "value": 16384}
+        """
+        target = data.get('module')
+        mod_id = self._resolve_module(target)
+        if mod_id is None:
+            return {'status': 'error', 'message': f'module not found: {target}'}
+        ctl = int(data.get('ctl', 1))
+        value = int(data.get('value', 0))
+        track = int(data.get('track', 0))
+        self.player.set_module_ctl(mod_id, ctl, value, track=track)
+        return {'status': 'ok', 'action': 'set_module_ctl',
+                'module': target, 'ctl': ctl, 'value': value}
+
+    async def _handle_list_module_types(self, data: dict) -> dict:
+        return {'status': 'ok', 'action': 'list_module_types',
+                'types': self.MODULE_TYPES}
+
+    async def _handle_build_piano(self, data: dict) -> dict:
+        """Build a gentle piano-like instrument chain.
+
+        Chain:  FMX (Piano) -> Filter Pro -> Echo -> Reverb -> OUT
+
+        The FMX synth's default patch is a bell/e-piano tone; we add a gentle
+        low-pass filter, a short stereo echo for sparkle, and a hall reverb
+        for air. Returns the module IDs so the UI can route notes / edit ctls.
+        """
+        name = data.get('name', 'Piano')
+        reverb_wet = int(data.get('reverb_wet', 18000))   # 0..32768
+        echo_wet = int(data.get('echo_wet', 9000))
+
+        # Remove any prior instance so the action is idempotent
+        for suffix in ('', ' Filter', ' Echo', ' Reverb'):
+            existing = self._find_module_by_name(name + suffix)
+            if existing >= 0:
+                try:
+                    self.player.sv_remove_module(existing)
+                except Exception:
+                    pass
+        self._module_cache = {}
+
+        created = []   # track created ids so we can clean up on failure
+
+        def mk(mtype_candidates, mname, x, y):
+            # Accept a list of fallback type names; use the first that succeeds.
+            if isinstance(mtype_candidates, str):
+                mtype_candidates = [mtype_candidates]
+            last_err = None
+            for mtype in mtype_candidates:
+                mid = self.player.sv_new_module(
+                    self.player.slotnr, mtype, mname, x, y, 0)
+                if mid >= 0:
+                    created.append(mid)
+                    return mid, mtype
+                last_err = mid
+            raise RuntimeError(
+                f'could not create {mname}: tried {mtype_candidates}, '
+                f'last error code {last_err}')
+
+        try:
+            piano, piano_type = mk(['FMX', 'FM'], name, 400, 500)
+            flt, flt_type = mk(['Filter Pro', 'Filter'], f'{name} Filter', 500, 500)
+            echo, echo_type = mk(['Echo'], f'{name} Echo', 600, 500)
+            rev, rev_type = mk(['Reverb'], f'{name} Reverb', 700, 500)
+        except Exception as e:
+            # Roll back any partial modules so we don't litter the project.
+            for mid in created:
+                try: self.player.sv_remove_module(mid)
+                except Exception: pass
+            return {'status': 'error', 'message': str(e)}
+
+        # Connect chain: piano -> filter -> echo -> reverb -> OUT
+        self.player.sv_connect_module(piano, flt)
+        self.player.sv_connect_module(flt, echo)
+        self.player.sv_connect_module(echo, rev)
+        self.player.sv_connect_module(rev, self.player.OUTPUT)
+
+        # Gentle defaults via controller events.
+        # NOTE: these indices assume SunVox 2.x built-in modules. If a
+        # controller doesn't exist, the call is silently ignored by the lib.
+        try:
+            # Reverb: ctl 1 = "Wet", ctl 2 = "Dry"
+            self.player.set_module_ctl(rev, 1, reverb_wet)
+            # Echo: ctl 1 = "Dry", ctl 2 = "Wet", ctl 3 = "Delay"
+            self.player.set_module_ctl(echo, 2, echo_wet)
+            # Filter Pro: ctl 3 = "Cutoff" (0..32768)
+            self.player.set_module_ctl(flt, 3, 22000)
+        except Exception:
+            pass
+
+        # Clear cached lookups so the new "Piano" is findable by name.
+        self._module_cache = {}
+
+        return {
+            'status': 'ok',
+            'action': 'build_piano',
+            'modules': {
+                'piano': {'id': piano, 'name': name, 'type': piano_type},
+                'filter': {'id': flt, 'name': f'{name} Filter', 'type': flt_type},
+                'echo': {'id': echo, 'name': f'{name} Echo', 'type': echo_type},
+                'reverb': {'id': rev, 'name': f'{name} Reverb', 'type': rev_type},
+            },
+            'hint': f'Use play_module_note with "module": "{name}" to play notes through it.',
+        }
 
     async def _handle_device_event(self, data: dict) -> dict:
         """
