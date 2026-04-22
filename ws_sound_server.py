@@ -676,50 +676,32 @@ class SoundEventHandler:
 
         # Apply piano-ish FMX preset.
         #
-        # FMX here uses 5 operators (1..5). Op 4 defaults to "Output mode = 2"
-        # (it's the carrier). We want:
-        #   * Instant attack, medium decay, ZERO sustain level → percussive
-        #     envelope that falls naturally, like a struck string.
-        #   * Modulator (op 5) with feedback + high freq multiply → adds the
-        #     inharmonic "hammer" spectrum that makes FM feel piano-like.
-        #   * More polyphony so held chords / arpeggios don't steal voices.
+        # FMX here has 5 operators; op 4 is the default carrier (its
+        # "Output mode" is 2 = audible). Rather than fight the modulation
+        # matrix (which would need routing configuration to do anything),
+        # we just shape op 4's amplitude envelope like a real piano:
         #
-        # Raw value reference (from empirical FMX defaults):
-        #   envelope time ctls:  0..32768 (100 = very short, 8000 ≈ ~1s)
-        #   level ctls:          0..32768 (16384 = 50%)
-        #   Freq multiply:       1000 = 1.0x ratio (scaled 1024)
-        #   Feedback:            0..32768
+        #   * Instant attack              — hammer strike
+        #   * Long decay                  — natural string fall
+        #   * Low sustain level (not 0!)  — so held notes stay audible
+        #                                   before releasing
+        #   * Medium release              — soft tail when key lifts
+        #
+        # Empirical scale on this FMX build: envelope time raw 100 is
+        # extremely short; ~8000 feels like ~1 second of decay. Sustain
+        # level raw 16384 = ~50%; piano wants lower (~20%).
         piano_preset = {
             # Master
-            'Volume':    20000,
+            'Volume':    28000,
             'Polyphony': 16,
 
-            # ---- All 5 operators: percussive envelope, no sustain plateau
-            '1 Attack': 0,  '2 Attack': 0,  '3 Attack': 0,  '4 Attack': 0,  '5 Attack': 0,
-            '1 Decay':  9000, '2 Decay': 9000, '3 Decay': 9000,
-            '4 Decay':  12000,    # carrier: slightly longer natural fall
-            '5 Decay':  4500,     # modulator: decays faster than carrier → tone mellows
-            '1 Sustain level': 0, '2 Sustain level': 0, '3 Sustain level': 0,
-            '4 Sustain level': 0, '5 Sustain level': 0,
-            '1 Release': 2500, '2 Release': 2500, '3 Release': 2500,
-            '4 Release': 4000, '5 Release': 2000,
-
-            # Velocity sensitivity (default 192 raw is already on — keep it
-            # explicit so you hear dynamics when the procedural engine varies
-            # velocity across the bar).
-            '1 Velocity sensitivity': 220,
-            '2 Velocity sensitivity': 220,
-            '3 Velocity sensitivity': 220,
+            # Op 4 — the audible carrier. This is what actually makes sound.
+            '4 Attack':        50,      # essentially instant
+            '4 Decay':         9000,    # long natural fall
+            '4 Sustain level': 6000,    # ~18% — held notes remain audible
+            '4 Release':       5000,    # gentle tail when key lifts
             '4 Velocity sensitivity': 220,
-            '5 Velocity sensitivity': 220,
-
-            # Op 5 is the modulator — give it bite.
-            '5 Feedback':     8000,
-            '5 Freq multiply': 3000,    # ~3.0x ratio → rich overtones
-            '4 Freq multiply': 1000,    # carrier stays at 1.0x
-
-            # A touch of self-modulation on op 4 for slight metallic colour.
-            '4 Self-modulation': 2500,
+            '4 Volume':        32000,
         }
         try:
             preset_result = self._apply_preset_by_name(piano, piano_preset)
