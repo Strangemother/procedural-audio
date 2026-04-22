@@ -174,7 +174,8 @@ class SoundEventHandler:
             module_id = self._find_module_by_name(module_name)
             if module_id < 0:
                 return {'status': 'error', 'message': f'Module not found: {module_name}'}
-            module_arg = module_id + 1  # sv_send_event wants module_id + 1
+            # player.sv_send_event adds +1 internally, so pass the raw id.
+            module_arg = module_id
 
         self.module.sv_send_event(track, note, velocity, module_arg)
         return {'status': 'ok', 'action': 'note', 'note': note, 'module': module_name}
@@ -188,8 +189,8 @@ class SoundEventHandler:
         if module_name:
             module_id = self._find_module_by_name(module_name)
             if module_id >= 0:
-                module_arg = module_id + 1
-            # if not found, fall back to default (track-level note-off still works)
+                # player.sv_send_event adds +1 internally, so pass the raw id.
+                module_arg = module_id
 
         self.module.sv_send_event(track, self.notes.NOTE_OFF, 129, module_arg)
         return {'status': 'ok', 'action': 'note_off', 'module': module_name}
