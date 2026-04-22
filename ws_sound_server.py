@@ -254,19 +254,81 @@ class SoundEventHandler:
         return {'status': 'ok', 'action': 'list_modules', 'modules': modules}
 
     def _find_module_by_name(self, module_name: str) -> int:
-        """Find a module ID by name, with caching."""
+        """Find a module ID by name, with caching.
+
+        Tries `sv_find_module` first for speed; falls back to a linear
+        scan via `sv_get_module_name` which is known-reliable (it's what
+        `list_modules` uses). The scan is necessary because
+        `sv_find_module` can return misleading values on some platforms
+        when its `restype` is unset.
+        """
         if module_name in self._module_cache:
-            return self._module_cache[module_name]
+            cached = self._module_cache[module_name]
+            # Validate cache entry — the module may have been removed.
+            try:
+                flags = self.player.sv_get_module_flags(cached)
+                if flags & 1:
+                    nm = self.player.sv_get_module_name(cached)
+                    if isinstance(nm, bytes):
+                        nm = nm.decode('utf-8', errors='replace')
+                    if nm and nm.strip() == module_name.strip():
+                        return cached
+            except Exception:
+                pass
+            # Stale — drop and re-scan
+            del self._module_cache[module_name]
 
-        module_id = self.player.svlib.sv_find_module(
-            self.player.slotnr,
-            module_name.encode('utf-8')
-        )
+        # Ensure restype is correct for the raw lookup (set once).
+        try:
+            import ctypes as _ct
+            if getattr(self.player.svlib.sv_find_module, 'restype', None) is None:
+                self.player.svlib.sv_find_module.restype = _ct.c_int32
+        except Exception:
+            pass
 
-        if module_id >= 0:
-            self._module_cache[module_name] = module_id
+        # Fast path
+        try:
+            module_id = self.player.svlib.sv_find_module(
+                self.player.slotnr,
+                module_name.encode('utf-8')
+            )
+        except Exception:
+            module_id = -1
 
-        return module_id
+        # Validate the fast-path answer; if it doesn't check out, fall back.
+        if module_id is not None and module_id >= 0:
+            try:
+                flags = self.player.sv_get_module_flags(module_id)
+                nm = self.player.sv_get_module_name(module_id)
+                if isinstance(nm, bytes):
+                    nm = nm.decode('utf-8', errors='replace')
+                if (flags & 1) and nm and nm.strip() == module_name.strip():
+                    self._module_cache[module_name] = module_id
+                    return module_id
+            except Exception:
+                pass
+
+        # Slow-path fallback: linear scan of all live modules by name.
+        target = module_name.strip()
+        try:
+            num = self.player.sv_get_number_of_modules()
+        except Exception:
+            num = 0
+        for i in range(num):
+            try:
+                flags = self.player.sv_get_module_flags(i)
+                if not (flags & 1):
+                    continue
+                nm = self.player.sv_get_module_name(i)
+                if isinstance(nm, bytes):
+                    nm = nm.decode('utf-8', errors='replace')
+                if nm and nm.strip() == target:
+                    self._module_cache[module_name] = i
+                    return i
+            except Exception:
+                continue
+
+        return -1
 
     async def _handle_play_module_note(self, data: dict) -> dict:
         """
