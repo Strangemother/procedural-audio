@@ -612,8 +612,8 @@ class SoundEventHandler:
         for air. Returns the module IDs so the UI can route notes / edit ctls.
         """
         name = data.get('name', 'Piano')
-        reverb_wet = int(data.get('reverb_wet', 18000))   # 0..32768
-        echo_wet = int(data.get('echo_wet', 9000))
+        reverb_wet = int(data.get('reverb_wet', 9000))    # softer hall
+        echo_wet = int(data.get('echo_wet', 4500))        # subtle room
 
         # Remove any prior instance so the action is idempotent
         for suffix in ('', ' Filter', ' Echo', ' Reverb'):
@@ -695,13 +695,23 @@ class SoundEventHandler:
             'Volume':    28000,
             'Polyphony': 16,
 
-            # Op 4 — the audible carrier. This is what actually makes sound.
-            '4 Attack':        50,      # essentially instant
-            '4 Decay':         9000,    # long natural fall
-            '4 Sustain level': 6000,    # ~18% — held notes remain audible
-            '4 Release':       5000,    # gentle tail when key lifts
-            '4 Velocity sensitivity': 220,
+            # Op 4 — the audible carrier.
+            # Piano character tweaks vs the "tubular bell" tone:
+            #   * Attack 0           — sharper hammer strike
+            #   * Decay shorter      — tone falls faster (less bell ring)
+            #   * Sustain level low  — held notes audible but fading
+            #   * Release short      — less drawn-out tail
+            #   * Self-modulation    — adds metallic harmonics without
+            #                          needing FM matrix routing
+            #   * Feedback           — extra bite at the onset
+            '4 Attack':        0,
+            '4 Decay':         6500,
+            '4 Sustain level': 3500,    # ~10%
+            '4 Release':       1800,    # tight tail
+            '4 Velocity sensitivity': 230,
             '4 Volume':        32000,
+            '4 Self-modulation': 6000,  # metallic edge
+            '4 Feedback':      3500,    # hammer-strike harmonics
         }
         try:
             preset_result = self._apply_preset_by_name(piano, piano_preset)
