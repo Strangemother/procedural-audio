@@ -191,14 +191,23 @@ function pressNote(el, k) {
     el.classList.add('active');
     const note = noteFromKey(k);
     const velocity = parseInt($('velocity').value, 10);
-    state.heldNote = { el, note };
-    send({ action: 'note', note, velocity });
+    const moduleEl = $('activeInstrument');
+    const module = moduleEl ? moduleEl.value.trim() : '';
+    state.heldNote = { el, note, module };
+    const payload = { action: 'note', note, velocity };
+    if (module) payload.module = module;
+    send(payload);
 }
 
 function releaseNote(el) {
     if (!el.classList.contains('active')) return;
     el.classList.remove('active');
-    send({ action: 'note_off' });
+    const payload = { action: 'note_off' };
+    // Send note_off to the same module the press used, if any
+    if (state.heldNote && state.heldNote.module) {
+        payload.module = state.heldNote.module;
+    }
+    send(payload);
     state.heldNote = null;
 }
 

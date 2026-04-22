@@ -163,19 +163,36 @@ class SoundEventHandler:
             return {'status': 'error', 'message': str(e)}
 
     async def _handle_note(self, data: dict) -> dict:
-        """Play a note."""
+        """Play a note. Optionally routed through a named module."""
         note = self.parse_note(data.get('note', 'C4'))
         velocity = data.get('velocity', 129)
         track = data.get('track', 0)
+        module_name = data.get('module')
 
-        self.module.sv_send_event(track, note, velocity)
-        return {'status': 'ok', 'action': 'note', 'note': note}
+        module_arg = 0
+        if module_name:
+            module_id = self._find_module_by_name(module_name)
+            if module_id < 0:
+                return {'status': 'error', 'message': f'Module not found: {module_name}'}
+            module_arg = module_id + 1  # sv_send_event wants module_id + 1
+
+        self.module.sv_send_event(track, note, velocity, module_arg)
+        return {'status': 'ok', 'action': 'note', 'note': note, 'module': module_name}
 
     async def _handle_note_off(self, data: dict) -> dict:
-        """Stop the current note."""
+        """Stop the current note. Optionally targets a named module."""
         track = data.get('track', 0)
-        self.module.sv_send_event(track, self.notes.NOTE_OFF)
-        return {'status': 'ok', 'action': 'note_off'}
+        module_name = data.get('module')
+
+        module_arg = 0
+        if module_name:
+            module_id = self._find_module_by_name(module_name)
+            if module_id >= 0:
+                module_arg = module_id + 1
+            # if not found, fall back to default (track-level note-off still works)
+
+        self.module.sv_send_event(track, self.notes.NOTE_OFF, 129, module_arg)
+        return {'status': 'ok', 'action': 'note_off', 'module': module_name}
 
     async def _handle_beep(self, data: dict) -> dict:
         """Play a note for a duration then stop."""

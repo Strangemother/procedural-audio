@@ -30,9 +30,12 @@
             <label>Duration (s)
                 <input id="duration" type="number" step="0.05" min="0" value="0.3" />
             </label>
+            <label>Instrument
+                <input id="activeInstrument" type="text" placeholder="(default)" value="Piano" style="width:140px" spellcheck="false" />
+            </label>
         </div>
         <div id="keyboard" class="keyboard"></div>
-        <p class="hint">Tip: use your computer keyboard — <kbd>A S D F G H J K</kbd> for white keys, <kbd>W E T Y U</kbd> for black keys. <kbd>Z</kbd>/<kbd>X</kbd> shift octaves.</p>
+        <p class="hint">Tip: use your computer keyboard — <kbd>A S D F G H J K</kbd> for white keys, <kbd>W E T Y U</kbd> for black keys. <kbd>Z</kbd>/<kbd>X</kbd> shift octaves. Clear <em>Instrument</em> to use the default engine; set it to a module name (e.g. <em>Piano</em>) to route through your custom chain.</p>
     </section>
 
     <section class="panel">
