@@ -674,85 +674,52 @@ class SoundEventHandler:
         except Exception:
             pass
 
-        # Apply piano-ish FMX preset (name-based — robust across versions).
+        # Apply piano-ish FMX preset.
         #
-        # FMX controller names vary slightly across SunVox versions. We try
-        # many candidate names for each "concept" (attack/decay/etc) using
-        # substring matching; unmatched names are simply skipped.
+        # FMX here uses 5 operators (1..5). Op 4 defaults to "Output mode = 2"
+        # (it's the carrier). We want:
+        #   * Instant attack, medium decay, ZERO sustain level → percussive
+        #     envelope that falls naturally, like a struck string.
+        #   * Modulator (op 5) with feedback + high freq multiply → adds the
+        #     inharmonic "hammer" spectrum that makes FM feel piano-like.
+        #   * More polyphony so held chords / arpeggios don't steal voices.
         #
-        # Piano character: instant attack, medium decay, zero sustain, mild
-        # feedback for metallic bite, a modulator with high freq ratio for
-        # inharmonic "hammer" spectrum. Similar to a DX7 E.PIANO-1 patch.
+        # Raw value reference (from empirical FMX defaults):
+        #   envelope time ctls:  0..32768 (100 = very short, 8000 ≈ ~1s)
+        #   level ctls:          0..32768 (16384 = 50%)
+        #   Freq multiply:       1000 = 1.0x ratio (scaled 1024)
+        #   Feedback:            0..32768
         piano_preset = {
             # Master
-            'volume':       28000,
-            'polyphony':    16,
+            'Volume':    20000,
+            'Polyphony': 16,
 
-            # Operator / carrier envelopes — try common variants
-            'c attack':     0,
-            'carrier attack': 0,
-            'op1 attack':   0,
-            'attack a':     0,
+            # ---- All 5 operators: percussive envelope, no sustain plateau
+            '1 Attack': 0,  '2 Attack': 0,  '3 Attack': 0,  '4 Attack': 0,  '5 Attack': 0,
+            '1 Decay':  9000, '2 Decay': 9000, '3 Decay': 9000,
+            '4 Decay':  12000,    # carrier: slightly longer natural fall
+            '5 Decay':  4500,     # modulator: decays faster than carrier → tone mellows
+            '1 Sustain level': 0, '2 Sustain level': 0, '3 Sustain level': 0,
+            '4 Sustain level': 0, '5 Sustain level': 0,
+            '1 Release': 2500, '2 Release': 2500, '3 Release': 2500,
+            '4 Release': 4000, '5 Release': 2000,
 
-            'c decay':      14000,
-            'carrier decay': 14000,
-            'op1 decay':    14000,
-            'decay a':      14000,
+            # Velocity sensitivity (default 192 raw is already on — keep it
+            # explicit so you hear dynamics when the procedural engine varies
+            # velocity across the bar).
+            '1 Velocity sensitivity': 220,
+            '2 Velocity sensitivity': 220,
+            '3 Velocity sensitivity': 220,
+            '4 Velocity sensitivity': 220,
+            '5 Velocity sensitivity': 220,
 
-            'c sustain':    0,
-            'carrier sustain': 0,
-            'op1 sustain':  0,
-            'sustain a':    0,
+            # Op 5 is the modulator — give it bite.
+            '5 Feedback':     8000,
+            '5 Freq multiply': 3000,    # ~3.0x ratio → rich overtones
+            '4 Freq multiply': 1000,    # carrier stays at 1.0x
 
-            'c release':    10000,
-            'carrier release': 10000,
-            'op1 release':  10000,
-            'release a':    10000,
-
-            # Modulator envelopes — fast attack+decay for bell-like bite
-            'b attack':     0,
-            'modulator attack': 0,
-            'op2 attack':   0,
-            'attack b':     0,
-
-            'b decay':      5000,
-            'modulator decay': 5000,
-            'op2 decay':    5000,
-            'decay b':      5000,
-
-            'b sustain':    0,
-            'modulator sustain': 0,
-            'op2 sustain':  0,
-            'sustain b':    0,
-
-            'b release':    4000,
-            'modulator release': 4000,
-            'op2 release':  4000,
-            'release b':    4000,
-
-            # Frequency ratios — modulator high → hammer overtones
-            'c freq ratio': 256,     # 1:1 in FMX fixed-point form if present
-            'c ratio':      1,
-            'carrier ratio': 1,
-            'op1 ratio':    1,
-
-            'b freq ratio': 1024,    # ~4:1 ratio
-            'b ratio':      4,
-            'modulator ratio': 4,
-            'op2 ratio':    4,
-
-            # Levels
-            'volume a':     28000,
-            'c volume':     28000,
-            'carrier volume': 28000,
-            'volume b':     14000,
-            'b volume':     14000,
-            'modulator volume': 14000,
-
-            # Feedback for metallic sheen
-            'feedback':     3000,
-            'a feedback':   3000,
-            'op1 feedback': 3000,
+            # A touch of self-modulation on op 4 for slight metallic colour.
+            '4 Self-modulation': 2500,
         }
         try:
             preset_result = self._apply_preset_by_name(piano, piano_preset)
