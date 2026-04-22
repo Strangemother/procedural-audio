@@ -1,0 +1,43 @@
+SunDog Engine / Dec 15 2020 16:28:32
+WM: initializing...
+System timer period has been changed to 8 ms; (min:1;max:1000000)
+WM: 1920 x 996; PPI 110; lang en_GB
+WM: flags SCALABLE MAXIMIZED 
+WM: ready
+DSOUND init...
+Found output device 0: Primary Sound Driver
+Found output device 1: Speakers (Realtek High Definition Audio)
+Found output device 2: Realtek Digital Output(Optical) (Realtek High Definition Audio)
+Found output device 3: 2460G5 (NVIDIA High Definition Audio)
+Found output device 4: Realtek Digital Output (Realtek High Definition Audio)
+Found output device 5: CABLE Input (VB-Audio Virtual Cable)
+DSOUND: selected device: -1
+DSOUND thread starting...
+DSOUND play
+WARNING: project "C:\Users\jay\Documents\projects\sunvox\src\v2-1\alpha.sunvox" was created in a newer SunVox v2.0.0.5, so it may be loaded incorrectly (some data may be lost or broken)!
+Stack ptr: 0
+Stack is clean
+SunVox record thread begin ...
+SunVox record thread end.
+Keys: 2 tracks; 32 lines.
+SunVox record thread begin ...
+SunVox record thread end.
+3:/sunvox_rec_data not found.
+SunVox record thread begin ...
+SunVox record thread end.
+Keys: 5 tracks; 41 lines.
+SunVox record thread begin ...
+SunVox record thread end.
+3:/sunvox_rec_data not found.
+SunVox record thread begin ...
+SunVox record thread end.
+3:/sunvox_rec_data not found.
+SunVox record thread begin ...
+SunVox record thread end.
+3:/sunvox_rec_data not found.
+SunVox record thread begin ...
+SunVox record thread end.
+Keys: 3 tracks; 93 lines.
+SOUND: sundog_sound_deinit() begin
+SOUND: sundog_sound_deinit() end
+Max memory used: 24704415
