@@ -639,10 +639,17 @@ function flightStop() {
     for (const id of flight.timeouts) clearTimeout(id);
     flight.timeouts.clear();
 
-    // Release all held tracks
-    for (const [track, held] of flight.heldByTrack) {
-        if (held) send({ action: 'note_off', track });
-    }
+    // Silence every flight track. When routed through a module,
+    // play_module_note schedules its own note-off server-side via
+    // asyncio.sleep, so clearing client timeouts isn't enough —
+    // we must proactively send NOTE_OFF to each track on the module.
+    const module = $('flightModule') ? $('flightModule').value.trim() : '';
+    const payload = { action: 'all_notes_off', tracks: [0, 1, 2, 3, 4, 5] };
+    if (module) payload.module = module;
+    send(payload);
+    // Also a global fallback to catch anything routed to the default engine.
+    send({ action: 'all_notes_off', tracks: [0, 1, 2, 3, 4, 5] });
+
     flight.heldByTrack.clear();
 
     $('flightStatus').textContent = 'idle';

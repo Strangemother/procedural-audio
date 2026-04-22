@@ -111,6 +111,7 @@ class SoundEventHandler:
         return {
             'note': self._handle_note,
             'note_off': self._handle_note_off,
+            'all_notes_off': self._handle_all_notes_off,
             'beep': self._handle_beep,
             'play_file': self._handle_play_file,
             'play_module_note': self._handle_play_module_note,
@@ -421,6 +422,78 @@ class SoundEventHandler:
             return mid if mid >= 0 else None
         return None
 
+    def _apply_preset_by_name(self, mod_id: int, preset: dict) -> dict:
+        """Apply a dict of {controller-name: value} to a module.
+
+        Controller lookup is case-insensitive and tolerates partial/prefix
+        matches so we can target common FMX names like "A Attack" without
+        needing to know the exact spelling across SunVox versions.
+        Unknown names are silently ignored (returned in 'skipped').
+        """
+        n = self.player.sv_get_number_of_module_ctls(mod_id)
+        names = []
+        for i in range(n):
+            raw_name = self.player.sv_get_module_ctl_name(mod_id, i)
+            if isinstance(raw_name, bytes):
+                raw_name = raw_name.decode('utf-8', errors='replace')
+            names.append((i, (raw_name or '').strip().lower()))
+
+        applied, skipped = [], []
+        for pname, pval in preset.items():
+            key = pname.strip().lower()
+            # Prefer exact match, then startswith, then substring
+            match = None
+            for idx, nm in names:
+                if nm == key:
+                    match = idx
+                    break
+            if match is None:
+                for idx, nm in names:
+                    if nm.startswith(key):
+                        match = idx
+                        break
+            if match is None:
+                for idx, nm in names:
+                    if key in nm:
+                        match = idx
+                        break
+
+            if match is None:
+                skipped.append(pname)
+                continue
+
+            # set_module_ctl uses 1-based index
+            self.player.set_module_ctl(mod_id, match + 1, int(pval))
+            applied.append((pname, match + 1))
+
+        return {'applied': applied, 'skipped': skipped}
+
+    async def _handle_all_notes_off(self, data: dict) -> dict:
+        """Silence every track, or a specific list of tracks, on one or all modules.
+
+        {"action": "all_notes_off"}                       # all tracks, global
+        {"action": "all_notes_off", "module": "Piano"}    # all tracks → Piano
+        {"action": "all_notes_off", "tracks": [0,1,2,3,4,5]}
+        """
+        module_name = data.get('module')
+        tracks = data.get('tracks')
+        if tracks is None:
+            tracks = list(range(16))   # cover all common tracks
+
+        module_arg = 0
+        if module_name:
+            mid = self._find_module_by_name(module_name)
+            if mid >= 0:
+                module_arg = mid
+
+        for t in tracks:
+            try:
+                self.module.sv_send_event(int(t), self.notes.NOTE_OFF, 129, module_arg)
+            except Exception:
+                pass
+        return {'status': 'ok', 'action': 'all_notes_off',
+                'module': module_name, 'tracks': tracks}
+
     async def _handle_get_module_ctls(self, data: dict) -> dict:
         """Return the list of controllers for a module with current values."""
         target = data.get('module')
@@ -529,6 +602,58 @@ class SoundEventHandler:
             self.player.set_module_ctl(flt, 3, 22000)
         except Exception:
             pass
+
+        # Apply piano-ish FMX preset (name-based — robust across versions).
+        #
+        # Real pianos have: fast attack, moderate decay, no sustain pedal-free
+        # tail (amplitude falls naturally), mild inharmonic brightness from
+        # hammer strike, slight detune per voice. In FMX terms:
+        #   - Operator C (carrier) envelope: instant attack, fast decay,
+        #     low sustain, medium release → percussive shape
+        #   - Operator B (modulator) → small amount for "bite" at onset,
+        #     decays quickly so the tone settles into a pure-ish sine
+        #   - A touch of feedback on a sine for metallic overtones
+        #   - Slightly detuned op for chorusy warmth
+        try:
+            self._apply_preset_by_name(piano, {
+                # Amplitude envelopes — short, percussive
+                'a attack':  0,
+                'a decay':   14000,
+                'a sustain': 0,
+                'a release': 9000,
+
+                'b attack':  0,
+                'b decay':   6000,     # modulator sparkle fades fast
+                'b sustain': 0,
+                'b release': 4000,
+
+                'c attack':  0,
+                'c decay':   18000,    # carrier body
+                'c sustain': 0,        # piano has no real sustain
+                'c release': 12000,
+
+                # Routing + levels (FMX defaults to a→b→c, often works well)
+                'a volume':  24000,
+                'b volume':  18000,
+                'c volume':  30000,
+
+                # Pitch — op C is the audible carrier; op B adds overtones
+                'a freq ratio': 1,
+                'b freq ratio': 3,     # hammer-like odd-harmonic bite
+                'c freq ratio': 1,
+
+                # Gentle feedback for metallic sheen
+                'a feedback':   2000,
+                'b feedback':   0,
+                'c feedback':   0,
+
+                # Misc
+                'volume':    28000,
+                'polyphony': 16,
+                'mode':      0,        # (if present) polyphonic
+            })
+        except Exception as e:
+            print(f'[build_piano] preset tuning skipped: {e}')
 
         # Clear cached lookups so the new "Piano" is findable by name.
         self._module_cache = {}
